@@ -5,23 +5,30 @@
 const EVM_IMAGE_META_KEY = "__HandoverImage__";
 
 function ParseEvmDetail(detailRaw) {
-    if (!detailRaw) return { items: {}, imageUrl: '' };
+    if (!detailRaw) return { items: {}, imageUrls: [] };
 
     let data = {};
     try {
         data = JSON.parse(detailRaw);
     } catch {
-        return { items: {}, imageUrl: '' };
+        return { items: {}, imageUrls: [] };
     }
 
     const imageMeta = data[EVM_IMAGE_META_KEY];
-    const imageUrl = imageMeta && imageMeta.ImageUrl ? imageMeta.ImageUrl : '';
+    let imageUrls = [];
+    if (imageMeta && Array.isArray(imageMeta.ImageUrls)) {
+        imageUrls = imageMeta.ImageUrls.filter(u => typeof u === 'string' && u.trim() !== '');
+    }
+    else if (imageMeta && imageMeta.ImageUrl) {
+        imageUrls = [imageMeta.ImageUrl];
+    }
+
     delete data[EVM_IMAGE_META_KEY];
 
-    return { items: data, imageUrl: imageUrl };
+    return { items: data, imageUrls: imageUrls };
 }
 
-function MergeEvmDetailWithImage(detailRaw, imageUrl) {
+function MergeEvmDetailWithImages(detailRaw, imageUrls) {
     let data = {};
     try {
         data = JSON.parse(detailRaw || '{}');
@@ -30,57 +37,115 @@ function MergeEvmDetailWithImage(detailRaw, imageUrl) {
     }
 
     delete data[EVM_IMAGE_META_KEY];
-    if (imageUrl) {
-        data[EVM_IMAGE_META_KEY] = { ImageUrl: imageUrl };
+    const urls = Array.isArray(imageUrls) ? imageUrls.filter(u => typeof u === 'string' && u.trim() !== '') : [];
+    if (urls.length > 0) {
+        data[EVM_IMAGE_META_KEY] = { ImageUrls: urls };
     }
 
     return JSON.stringify(data);
 }
 
-function ToggleEvmImagePreview(linkSelector, previewSelector, imageUrl) {
-    if (imageUrl) {
-        $(linkSelector).attr('href', imageUrl).text('Mở ảnh đã upload');
-        $(previewSelector).removeClass('d-none');
-    } else {
-        $(linkSelector).attr('href', '#').text('Chưa có ảnh');
+function RenderEvmImageList(previewSelector, imageUrls, options = {}) {
+    const canRemove = options.canRemove === true;
+    const dataKey = options.dataKey || '';
+
+    if (!Array.isArray(imageUrls) || imageUrls.length < 1) {
+        $(previewSelector).html('');
         $(previewSelector).addClass('d-none');
+        return;
+    }
+
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    $.each(imageUrls, function (index, url) {
+        html += `<div class="border rounded p-1" style="width:90px;">`;
+        html += `<img src="${url}" style="width:100%;height:70px;object-fit:cover;cursor:pointer;" onclick="window.open('${url}','_blank')">`;
+        if (canRemove) {
+            html += `<button type="button" class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="RemoveEvmUploadedImage('${dataKey}', ${index})">Xóa</button>`;
+        }
+        html += '</div>';
+    });
+    html += '</div>';
+
+    $(previewSelector).html(html);
+    $(previewSelector).removeClass('d-none');
+}
+
+function RemoveEvmUploadedImage(dataKey, index) {
+    const holder = $(`#${dataKey}`);
+    let images = [];
+    try {
+        images = JSON.parse(holder.val() || '[]');
+    }
+    catch {
+        images = [];
+    }
+
+    images.splice(index, 1);
+    holder.val(JSON.stringify(images));
+
+    if (dataKey === 'evm_add_handoverImageUrls') {
+        RenderEvmImageList('#evm_add_handoverImagePreview', images, { canRemove: true, dataKey: 'evm_add_handoverImageUrls' });
+    }
+    if (dataKey === 'evm_edit_handoverImageUrls') {
+        RenderEvmImageList('#evm_edit_handoverImagePreview', images, { canRemove: true, dataKey: 'evm_edit_handoverImageUrls' });
     }
 }
 
-function UploadEvmHandoverImage(fileInputSelector, hiddenUrlSelector, linkSelector, previewSelector) {
+function UploadEvmHandoverImages(fileInputSelector, hiddenUrlsSelector, previewSelector) {
     const input = $(fileInputSelector)[0];
     if (!input || !input.files || input.files.length === 0) return;
 
-    const formData = new FormData();
-    formData.append('file', input.files[0]);
+    let existing = [];
+    try {
+        existing = JSON.parse($(hiddenUrlsSelector).val() || '[]');
+    }
+    catch {
+        existing = [];
+    }
 
-    $.ajax({
-        url: '/HandoverEVM/Works/UploadHandoverImage',
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        success: function (res) {
-            if (res.success) {
-                $(hiddenUrlSelector).val(res.fileUrl);
-                ToggleEvmImagePreview(linkSelector, previewSelector, res.fileUrl);
-                toastr["success"]('Upload ảnh thành công');
-            } else {
-                toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
+    const files = Array.from(input.files);
+    let pending = files.length;
+
+    $.each(files, function (_, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        $.ajax({
+            url: '/HandoverEVM/Works/UploadHandoverImage',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (res) {
+                if (res.success && res.fileUrl) {
+                    existing.push(res.fileUrl);
+                } else {
+                    toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
+                }
+            },
+            error: function () {
+                toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
+            },
+            complete: function () {
+                pending--;
+                if (pending === 0) {
+                    $(hiddenUrlsSelector).val(JSON.stringify(existing));
+                    RenderEvmImageList(previewSelector, existing, { canRemove: true, dataKey: hiddenUrlsSelector.replace('#', '') });
+                    toastr["success"]('Upload ảnh thành công');
+                }
             }
-        },
-        error: function () {
-            toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
-        }
+        });
     });
 }
 
 $(document).on('change', '#evm_add_handoverImage', function () {
-    UploadEvmHandoverImage('#evm_add_handoverImage', '#evm_add_handoverImageUrl', '#evm_add_handoverImageLink', '#evm_add_handoverImagePreview');
+    UploadEvmHandoverImages('#evm_add_handoverImage', '#evm_add_handoverImageUrls', '#evm_add_handoverImagePreview');
+    $(this).val('');
 });
 
 $(document).on('change', '#evm_edit_handoverImage', function () {
-    UploadEvmHandoverImage('#evm_edit_handoverImage', '#evm_edit_handoverImageUrl', '#evm_edit_handoverImageLink', '#evm_edit_handoverImagePreview');
+    UploadEvmHandoverImages('#evm_edit_handoverImage', '#evm_edit_handoverImageUrls', '#evm_edit_handoverImagePreview');
+    $(this).val('');
 });
 
 // Add row input dynamic
@@ -389,8 +454,8 @@ function AddEVM_Open() {
     refreshModal();
     document.getElementById("evm_date").value = GetDateToday();
     $("#evm_add_handoverImage").val("");
-    $("#evm_add_handoverImageUrl").val("");
-    ToggleEvmImagePreview("#evm_add_handoverImageLink", "#evm_add_handoverImagePreview", "");
+    $("#evm_add_handoverImageUrls").val('[]');
+    RenderEvmImageList("#evm_add_handoverImagePreview", [], { canRemove: true, dataKey: 'evm_add_handoverImageUrls' });
 }
 //  Add EVM Event
 function SaveEVM() {
@@ -421,7 +486,7 @@ function SaveEVM() {
             }
         }
         data.Detail += '}';
-        data.Detail = MergeEvmDetailWithImage(data.Detail, $('#evm_add_handoverImageUrl').val());
+        data.Detail = MergeEvmDetailWithImages(data.Detail, JSON.parse($('#evm_add_handoverImageUrls').val() || '[]'));
     }
     else {
         toastr["warning"]('Please click (+) button after enter work!', 'Data Null');
@@ -522,8 +587,8 @@ $(document).on("click", "[data-e_edit]", function (e) {
                         const parsedDetail = ParseEvmDetail(work.Detail);
                         const arrEVM = parsedDetail.items;
                         $("#evm_edit_handoverImage").val("");
-                        $("#evm_edit_handoverImageUrl").val(parsedDetail.imageUrl);
-                        ToggleEvmImagePreview("#evm_edit_handoverImageLink", "#evm_edit_handoverImagePreview", parsedDetail.imageUrl);
+                        $("#evm_edit_handoverImageUrls").val(JSON.stringify(parsedDetail.imageUrls || []));
+                        RenderEvmImageList("#evm_edit_handoverImagePreview", parsedDetail.imageUrls || [], { canRemove: true, dataKey: 'evm_edit_handoverImageUrls' });
                         let max = 0;
                         $.each(arrEVM, function (key, value) {
                             max = key;
@@ -597,7 +662,7 @@ function SaveEVM_Edit() {
             }
         }
         data.Detail += '}';
-        data.Detail = MergeEvmDetailWithImage(data.Detail, $('#evm_edit_handoverImageUrl').val());
+        data.Detail = MergeEvmDetailWithImages(data.Detail, JSON.parse($('#evm_edit_handoverImageUrls').val() || '[]'));
     }
     else {
         toastr["warning"]('Please click (+) button after enter work!', 'Data Null');
@@ -740,8 +805,15 @@ $(document).on("click", "[data-e_detail]", function (e) {
                     if (evm.Detail != null) {
                         const parsedDetail = ParseEvmDetail(evm.Detail);
                         const item = parsedDetail.items;
-                        if (parsedDetail.imageUrl) {
-                            $("#evmImageDetail").html(`<a href="${parsedDetail.imageUrl}" target="_blank" rel="noopener">Mở hình ảnh giao ca</a>`);
+                        if (parsedDetail.imageUrls && parsedDetail.imageUrls.length > 0) {
+                            let imageHtml = '<div class="d-flex flex-wrap gap-2 mb-2">';
+                            $.each(parsedDetail.imageUrls, function (index, url) {
+                                imageHtml += `<img src="${url}" style="width:72px;height:72px;object-fit:cover;cursor:pointer;border-radius:4px;" onclick="SetEvmMainImage(${index})">`;
+                            });
+                            imageHtml += '</div>';
+                            imageHtml += `<div><img id="evmMainImage" src="${parsedDetail.imageUrls[0]}" style="max-width:100%;max-height:360px;cursor:pointer;border-radius:6px;" onclick="window.open(this.src,'_blank')"></div>`;
+                            $('#evmImageDetail').data('images', parsedDetail.imageUrls);
+                            $('#evmImageDetail').html(imageHtml);
                         } else {
                             $("#evmImageDetail").html('<span class="text-muted">Không có hình ảnh giao ca</span>');
                         }
@@ -828,6 +900,12 @@ $(document).on("click", "[data-e_detail]", function (e) {
         }
     });
 });
+function SetEvmMainImage(index) {
+    const images = $("#evmImageDetail").data("images") || [];
+    if (!images[index]) return;
+    $("#evmMainImage").attr("src", images[index]);
+}
+
 //  Show Detele Modal
 $(document).on("click", "[data-e_delete]", function (e) {
     e.preventDefault();

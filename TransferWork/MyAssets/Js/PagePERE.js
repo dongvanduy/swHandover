@@ -3,70 +3,174 @@
 /*********************************************/
 
 const HANDOVER_IMAGE_KEY = "[HANDOVER_IMAGE]";
+const HANDOVER_IMAGES_KEY = "[HANDOVER_IMAGES]";
 
-function ParseDetailAndImage(detail) {
+function ParseDetailAndImages(detail) {
     const raw = detail || '';
-    const markerIndex = raw.indexOf(HANDOVER_IMAGE_KEY);
-    if (markerIndex === -1) {
-        return { detailText: raw, imageUrl: '' };
+
+    const markerIndexMulti = raw.indexOf(HANDOVER_IMAGES_KEY);
+    if (markerIndexMulti !== -1) {
+        const detailText = raw.substring(0, markerIndexMulti).trimEnd();
+        const imageText = raw.substring(markerIndexMulti + HANDOVER_IMAGES_KEY.length).trim();
+        try {
+            const list = JSON.parse(imageText);
+            const imageUrls = Array.isArray(list) ? list.filter(u => typeof u === 'string' && u.trim() !== '') : [];
+            return { detailText: detailText, imageUrls: imageUrls };
+        }
+        catch {
+            return { detailText: detailText, imageUrls: [] };
+        }
     }
 
-    const detailText = raw.substring(0, markerIndex).trimEnd();
-    const imageUrl = raw.substring(markerIndex + HANDOVER_IMAGE_KEY.length).trim();
-    return { detailText: detailText, imageUrl: imageUrl };
+    const markerIndexSingle = raw.indexOf(HANDOVER_IMAGE_KEY);
+    if (markerIndexSingle !== -1) {
+        const detailText = raw.substring(0, markerIndexSingle).trimEnd();
+        const imageUrl = raw.substring(markerIndexSingle + HANDOVER_IMAGE_KEY.length).trim();
+        return { detailText: detailText, imageUrls: imageUrl ? [imageUrl] : [] };
+    }
+
+    return { detailText: raw, imageUrls: [] };
 }
 
-function BuildDetailWithImage(detailText, imageUrl) {
+function BuildDetailWithImages(detailText, imageUrls) {
     const text = (detailText || '').trim();
-    const url = (imageUrl || '').trim();
-    if (!url) {
+    const urls = Array.isArray(imageUrls) ? imageUrls.filter(u => typeof u === 'string' && u.trim() !== '') : [];
+
+    if (urls.length < 1) {
         return text;
     }
+
+    const imageJson = JSON.stringify(urls);
     if (!text) {
-        return HANDOVER_IMAGE_KEY + url;
+        return HANDOVER_IMAGES_KEY + imageJson;
     }
-    return text + "\n" + HANDOVER_IMAGE_KEY + url;
+
+    return text + "\n" + HANDOVER_IMAGES_KEY + imageJson;
 }
 
-function ToggleImagePreview(linkSelector, previewSelector, imageUrl) {
-    if (imageUrl) {
-        $(linkSelector).attr('href', imageUrl).text('Mở ảnh đã upload');
-        $(previewSelector).removeClass('d-none');
-    } else {
-        $(linkSelector).attr('href', '#').text('Chưa có ảnh');
-        $(previewSelector).addClass('d-none');
+function RenderImageList(previewSelector, imageUrls, options = {}) {
+    const previewElm = $(previewSelector);
+    const canRemove = options.canRemove === true;
+    const dataKey = options.dataKey || '';
+
+    if (!Array.isArray(imageUrls) || imageUrls.length < 1) {
+        previewElm.html('');
+        previewElm.addClass('d-none');
+        return;
+    }
+
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    $.each(imageUrls, function (index, url) {
+        html += `<div class="border rounded p-1" style="width: 90px;">`;
+        html += `<img src="${url}" style="width:100%;height:70px;object-fit:cover;cursor:pointer;" onclick="window.open('${url}','_blank')">`;
+        if (canRemove) {
+            html += `<button type="button" class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="RemoveUploadedImage('${dataKey}', ${index})">Xóa</button>`;
+        }
+        html += `</div>`;
+    });
+    html += '</div>';
+
+    previewElm.html(html);
+    previewElm.removeClass('d-none');
+}
+
+function RemoveUploadedImage(dataKey, index) {
+    const holder = $(`#${dataKey}`);
+    let images = [];
+    try {
+        images = JSON.parse(holder.val() || '[]');
+    }
+    catch {
+        images = [];
+    }
+
+    images.splice(index, 1);
+    holder.val(JSON.stringify(images));
+
+    if (dataKey === 'add_handoverImageUrls') {
+        RenderImageList('#add_handoverImagePreview', images, { canRemove: true, dataKey: 'add_handoverImageUrls' });
+    }
+    if (dataKey === 'Edit2_handoverImageUrls') {
+        RenderImageList('#Edit2_handoverImagePreview', images, { canRemove: true, dataKey: 'Edit2_handoverImageUrls' });
     }
 }
 
-function UploadHandoverImage(fileInputSelector, hiddenUrlSelector, linkSelector, previewSelector) {
+function UploadHandoverImages(fileInputSelector, hiddenUrlsSelector, previewSelector) {
     const input = $(fileInputSelector)[0];
     if (!input || !input.files || input.files.length === 0) {
         return;
     }
 
-    const formData = new FormData();
-    formData.append('file', input.files[0]);
+    let existing = [];
+    try {
+        existing = JSON.parse($(hiddenUrlsSelector).val() || '[]');
+    }
+    catch {
+        existing = [];
+    }
 
-    $.ajax({
-        url: '/Handover/Works/UploadHandoverImage',
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        success: function (res) {
-            if (res.success) {
-                $(hiddenUrlSelector).val(res.fileUrl);
-                ToggleImagePreview(linkSelector, previewSelector, res.fileUrl);
-                toastr["success"]('Upload ảnh thành công');
+    const files = Array.from(input.files);
+    let pending = files.length;
+
+    if (pending < 1) {
+        return;
+    }
+
+    $.each(files, function (_, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        $.ajax({
+            url: '/Handover/Works/UploadHandoverImage',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (res) {
+                if (res.success && res.fileUrl) {
+                    existing.push(res.fileUrl);
+                }
+                else {
+                    toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
+                }
+            },
+            error: function () {
+                toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
+            },
+            complete: function () {
+                pending--;
+                if (pending === 0) {
+                    $(hiddenUrlsSelector).val(JSON.stringify(existing));
+                    RenderImageList(previewSelector, existing, { canRemove: true, dataKey: hiddenUrlsSelector.replace('#', '') });
+                    toastr["success"]('Upload ảnh thành công');
+                }
             }
-            else {
-                toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
-            }
-        },
-        error: function () {
-            toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
-        }
+        });
     });
+}
+
+function RenderDetailImageGallery(containerSelector, imageUrls) {
+    if (!Array.isArray(imageUrls) || imageUrls.length < 1) {
+        $(containerSelector).html('<span class="text-muted">Không có hình ảnh giao ca</span>');
+        return;
+    }
+
+    let html = '<div class="d-flex flex-wrap gap-2 mb-2">';
+    $.each(imageUrls, function (index, url) {
+        html += `<img src="${url}" class="border rounded" style="width:72px;height:72px;object-fit:cover;cursor:pointer;" onclick="SetMainDetailImage('${containerSelector.replace('#', '')}', ${index})">`;
+    });
+    html += '</div>';
+    html += `<div><img id="${containerSelector.replace('#', '')}_main" src="${imageUrls[0]}" style="max-width:100%;max-height:360px;border-radius:6px;cursor:pointer;" onclick="window.open(this.src,'_blank')"></div>`;
+
+    $(containerSelector).data('images', imageUrls);
+    $(containerSelector).html(html);
+}
+
+function SetMainDetailImage(containerId, index) {
+    const holder = $(`#${containerId}`);
+    const images = holder.data('images') || [];
+    if (!images[index]) return;
+    $(`#${containerId}_main`).attr('src', images[index]);
 }
 
 //create data to table
@@ -111,11 +215,13 @@ $(function () {
 });
 
 $(document).on('change', '#add_handoverImage', function () {
-    UploadHandoverImage('#add_handoverImage', '#add_handoverImageUrl', '#add_handoverImageLink', '#add_handoverImagePreview');
+    UploadHandoverImages('#add_handoverImage', '#add_handoverImageUrls', '#add_handoverImagePreview');
+    $(this).val('');
 });
 
 $(document).on('change', '#Edit2_handoverImage', function () {
-    UploadHandoverImage('#Edit2_handoverImage', '#Edit2_handoverImageUrl', '#Edit2_handoverImageLink', '#Edit2_handoverImagePreview');
+    UploadHandoverImages('#Edit2_handoverImage', '#Edit2_handoverImageUrls', '#Edit2_handoverImagePreview');
+    $(this).val('');
 });
 
 // Event
@@ -136,8 +242,8 @@ $(document).on('change', '#Edit2_handoverImage', function () {
         $('#add_work').val('');
         $('#add_result').val('');
         $('#add_handoverImage').val('');
-        $('#add_handoverImageUrl').val('');
-        ToggleImagePreview('#add_handoverImageLink', '#add_handoverImagePreview', '');
+        $('#add_handoverImageUrls').val('[]');
+        RenderImageList('#add_handoverImagePreview', [], { canRemove: true, dataKey: 'add_handoverImageUrls' });
 
         $('#add_modal').modal('show');
     }
@@ -156,7 +262,7 @@ $(document).on('change', '#Edit2_handoverImage', function () {
             Status: $('#add_status').val(),
 
             WorkDes: $('#add_work').val(),
-            Detail: BuildDetailWithImage($('#add_result').val(), $('#add_handoverImageUrl').val())
+            Detail: BuildDetailWithImages($('#add_result').val(), JSON.parse($('#add_handoverImageUrls').val() || '[]'))
         };
         if (!CheckData(data)) return;
         //Send to server
@@ -241,11 +347,11 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                         $("#Edit2_Type").val(data.Type);
                         $("#Edit2_Status").val(data.Status);
                         $("#Edit2_Work").val(data.WorkDes);
-                        const detailData = ParseDetailAndImage(data.Detail);
+                        const detailData = ParseDetailAndImages(data.Detail);
                         $("#Edit2_Result").val(detailData.detailText);
                         $('#Edit2_handoverImage').val('');
-                        $('#Edit2_handoverImageUrl').val(detailData.imageUrl);
-                        ToggleImagePreview('#Edit2_handoverImageLink', '#Edit2_handoverImagePreview', detailData.imageUrl);
+                        $('#Edit2_handoverImageUrls').val(JSON.stringify(detailData.imageUrls || []));
+                        RenderImageList('#Edit2_handoverImagePreview', detailData.imageUrls || [], { canRemove: true, dataKey: 'Edit2_handoverImageUrls' });
 
                         $('#Edit2Modal').modal('show');
                     }
@@ -271,9 +377,9 @@ $(document).on('change', '#Edit2_handoverImage', function () {
 
                         $('#Edit_Status').val(work.Status);
                         $('#Edit_Type').val(work.Type);
-                        const detailData = ParseDetailAndImage(work.Detail);
+                        const detailData = ParseDetailAndImages(work.Detail);
                         $('#Edit_Detail').val(detailData.detailText);
-                        $('#Edit_Detail').data('image-url', detailData.imageUrl || '');
+                        $('#Edit_Detail').data('image-urls', detailData.imageUrls || []);
 
                         { // Dynamic Input
                             let cardElm = document.getElementById('cardEdit');
@@ -338,7 +444,7 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                 Status: $('#Edit2_Status').val(),
 
                 WorkDes: $('#Edit2_Work').val(),
-                Detail: BuildDetailWithImage($('#Edit2_Result').val(), $('#Edit2_handoverImageUrl').val())
+                Detail: BuildDetailWithImages($('#Edit2_Result').val(), JSON.parse($('#Edit2_handoverImageUrls').val() || '[]'))
             }
 
         }
@@ -350,7 +456,7 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                 OwnerRequest: $('#Edit_UserReq').val(),
                 OwnerReceive: $('#Edit_UserRec').val(),
                 Status: $('#Edit_Status').val(),
-                Detail: BuildDetailWithImage($('#Edit_Detail').val(), $('#Edit_Detail').data('image-url') || '')
+                Detail: BuildDetailWithImages($('#Edit_Detail').val(), $('#Edit_Detail').data('image-urls') || [])
             }
             const workInput = [...document.querySelectorAll(`[data-InputEdit]`),];
             const arrLength = workInput.length;
@@ -597,14 +703,9 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                     $('#details_work').html(workHtmlText);
 
                     //Card Result and Image
-                    const detailsData = ParseDetailAndImage(work.Detail);
+                    const detailsData = ParseDetailAndImages(work.Detail);
                     $('#details_result').html(detailsData.detailText);
-                    if (detailsData.imageUrl) {
-                        $('#details_image').html(`<a href="${detailsData.imageUrl}" target="_blank" rel="noopener">Mở hình ảnh giao ca</a>`);
-                    }
-                    else {
-                        $('#details_image').html('<span class="text-muted">Không có hình ảnh giao ca</span>');
-                    }
+                    RenderDetailImageGallery('#details_image', detailsData.imageUrls || []);
 
                     //Card History
                     let HistoryElm = document.getElementById('details_history');
