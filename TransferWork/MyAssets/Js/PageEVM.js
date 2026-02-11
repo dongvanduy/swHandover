@@ -2,9 +2,155 @@
     CreateTable();
 });
 
+const EVM_IMAGE_META_KEY = "__HandoverImage__";
+
+function ParseEvmDetail(detailRaw) {
+    if (!detailRaw) return { items: {}, imageUrls: [] };
+
+    let data = {};
+    try {
+        data = JSON.parse(detailRaw);
+    } catch {
+        return { items: {}, imageUrls: [] };
+    }
+
+    const imageMeta = data[EVM_IMAGE_META_KEY];
+    let imageUrls = [];
+    if (imageMeta && Array.isArray(imageMeta.ImageUrls)) {
+        imageUrls = imageMeta.ImageUrls.filter(u => typeof u === 'string' && u.trim() !== '');
+    }
+    else if (imageMeta && imageMeta.ImageUrl) {
+        imageUrls = [imageMeta.ImageUrl];
+    }
+
+    delete data[EVM_IMAGE_META_KEY];
+
+    return { items: data, imageUrls: imageUrls };
+}
+
+function MergeEvmDetailWithImages(detailRaw, imageUrls) {
+    let data = {};
+    try {
+        data = JSON.parse(detailRaw || '{}');
+    } catch {
+        data = {};
+    }
+
+    delete data[EVM_IMAGE_META_KEY];
+    const urls = Array.isArray(imageUrls) ? imageUrls.filter(u => typeof u === 'string' && u.trim() !== '') : [];
+    if (urls.length > 0) {
+        data[EVM_IMAGE_META_KEY] = { ImageUrls: urls };
+    }
+
+    return JSON.stringify(data);
+}
+
+function RenderEvmImageList(previewSelector, imageUrls, options = {}) {
+    const canRemove = options.canRemove === true;
+    const dataKey = options.dataKey || '';
+
+    if (!Array.isArray(imageUrls) || imageUrls.length < 1) {
+        $(previewSelector).html('');
+        $(previewSelector).addClass('d-none');
+        return;
+    }
+
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    $.each(imageUrls, function (index, url) {
+        html += `<div class="border rounded p-1" style="width:90px;">`;
+        html += `<img src="${url}" style="width:100%;height:70px;object-fit:cover;cursor:pointer;" onclick="window.open('${url}','_blank')">`;
+        if (canRemove) {
+            html += `<button type="button" class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="RemoveEvmUploadedImage('${dataKey}', ${index})">Xóa</button>`;
+        }
+        html += '</div>';
+    });
+    html += '</div>';
+
+    $(previewSelector).html(html);
+    $(previewSelector).removeClass('d-none');
+}
+
+function RemoveEvmUploadedImage(dataKey, index) {
+    const holder = $(`#${dataKey}`);
+    let images = [];
+    try {
+        images = JSON.parse(holder.val() || '[]');
+    }
+    catch {
+        images = [];
+    }
+
+    images.splice(index, 1);
+    holder.val(JSON.stringify(images));
+
+    if (dataKey === 'evm_add_handoverImageUrls') {
+        RenderEvmImageList('#evm_add_handoverImagePreview', images, { canRemove: true, dataKey: 'evm_add_handoverImageUrls' });
+    }
+    if (dataKey === 'evm_edit_handoverImageUrls') {
+        RenderEvmImageList('#evm_edit_handoverImagePreview', images, { canRemove: true, dataKey: 'evm_edit_handoverImageUrls' });
+    }
+}
+
+function UploadEvmHandoverImages(fileInputSelector, hiddenUrlsSelector, previewSelector) {
+    const input = $(fileInputSelector)[0];
+    if (!input || !input.files || input.files.length === 0) return;
+
+    let existing = [];
+    try {
+        existing = JSON.parse($(hiddenUrlsSelector).val() || '[]');
+    }
+    catch {
+        existing = [];
+    }
+
+    const files = Array.from(input.files);
+    let pending = files.length;
+
+    $.each(files, function (_, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        $.ajax({
+            url: '/HandoverEVM/Works/UploadHandoverImage',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (res) {
+                if (res.success && res.fileUrl) {
+                    existing.push(res.fileUrl);
+                } else {
+                    toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
+                }
+            },
+            error: function () {
+                toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
+            },
+            complete: function () {
+                pending--;
+                if (pending === 0) {
+                    $(hiddenUrlsSelector).val(JSON.stringify(existing));
+                    RenderEvmImageList(previewSelector, existing, { canRemove: true, dataKey: hiddenUrlsSelector.replace('#', '') });
+                    toastr["success"]('Upload ảnh thành công');
+                }
+            }
+        });
+    });
+}
+
+$(document).on('change', '#evm_add_handoverImage', function () {
+    UploadEvmHandoverImages('#evm_add_handoverImage', '#evm_add_handoverImageUrls', '#evm_add_handoverImagePreview');
+    $(this).val('');
+});
+
+$(document).on('change', '#evm_edit_handoverImage', function () {
+    UploadEvmHandoverImages('#evm_edit_handoverImage', '#evm_edit_handoverImageUrls', '#evm_edit_handoverImagePreview');
+    $(this).val('');
+});
+
 // Add row input dynamic
-function AddItemDnm() {  
-    // query all input and get max int, get card and button   
+function AddItemDnm() {
+    // query all input and get max int, get card and button
     let container = document.getElementById('DnmContainer');
     let itemArr = [...container.querySelectorAll(`[data-RowIndex]`),];
 
@@ -61,7 +207,7 @@ function Refesh(index) {
     };
 }
 // Reset modal
-function refreshModal() {   
+function refreshModal() {
     let addModal = document.getElementById('DnmContainer');
     let rowArr = addModal.querySelectorAll('[data-RowIndex]');
     if (rowArr.length > 2) {
@@ -74,7 +220,7 @@ function refreshModal() {
         if (inputArr[i].getAttribute('disabled') == null) {
             inputArr[i].value = '';
         }
-    }   
+    }
 }
 // Render data to row
 function DrawRow(data) {
@@ -95,10 +241,13 @@ function DrawRow(data) {
     let col2 = '<td class="e_col_3">' + data.Model + '</td>';
     rowTemp.push(col2);
 
-    let detail = JSON.parse(data.Detail);
+    let detail = ParseEvmDetail(data.Detail).items;
     // Col 4
     let col3 = '<td class="e_col_4">';
     $.each(detail, function (k, v) {
+        if (k.toString().startsWith("__")) {
+            return;
+        }
         if (k > 3) {
             return;
         }
@@ -107,12 +256,15 @@ function DrawRow(data) {
         }
         if (k == 3) {
             col3 += '<p class="text-over" style="border: 0">...</p>';
-        }        
-    });    
-    rowTemp.push(col3);   
+        }
+    });
+    rowTemp.push(col3);
     //col 5
     let col4 = '<td class="e_col_5">';
     $.each(detail, function (k, v) {
+        if (k.toString().startsWith("__")) {
+            return;
+        }
         if (k > 3) {
             return;
         }
@@ -122,11 +274,14 @@ function DrawRow(data) {
         if (k == 3) {
             col4 += '<p class="text-over" style="border: 0">...</p>';
         }
-    });    
-    rowTemp.push(col4);   
+    });
+    rowTemp.push(col4);
     //col 6
     let col5 = '<td class="e_col_6">';
     $.each(detail, function (k, v) {
+        if (k.toString().startsWith("__")) {
+            return;
+        }
         if (k > 3) {
             return;
         }
@@ -136,8 +291,8 @@ function DrawRow(data) {
         if (k == 3) {
             col5 += '<p class="text-over" style="border: 0">...</p>';
         }
-    });    
-    rowTemp.push(col5);   
+    });
+    rowTemp.push(col5);
     // Col 7
     let owner = data.Owner.split(',');
     let col6 = '<td class="col_4">';
@@ -197,7 +352,7 @@ function CreateTable () {
         contentType: "application/json;charset=utf-8",
         dataType: "json",
         success: function (res) {
-            dataTable.rows().remove('all'); 
+            dataTable.rows().remove('all');
             DrawUserList(res.infoUser, 'add_listOwnerEvm');
             DrawUserList(res.infoUser, 'edit_listOwnerEvm');
 
@@ -205,7 +360,7 @@ function CreateTable () {
             DrawModelTableHead(res.model, 'ModelSelected');
 
             switch (res.status) {
-                case 'success': {                    
+                case 'success': {
                     toastr["success"]('Get datatable success!', 'DONE');
                     $.each(res.data, function (key, value) {
                         dataTable.rows().add(DrawRow(value));
@@ -240,7 +395,7 @@ function DrawUserList(infoUser, idList) {
 }
 // Add row input dynamic
 function EditItemDnm() {
-    // query all input and get max int, get card and button   
+    // query all input and get max int, get card and button
     let container = document.getElementById('EditContainer');
     let itemArr = [...container.querySelectorAll(`[data-RowIndex]`),];
 
@@ -298,6 +453,9 @@ function AddEVM_Open() {
     $('#AddEvm').modal('show');
     refreshModal();
     document.getElementById("evm_date").value = GetDateToday();
+    $("#evm_add_handoverImage").val("");
+    $("#evm_add_handoverImageUrls").val('[]');
+    RenderEvmImageList("#evm_add_handoverImagePreview", [], { canRemove: true, dataKey: 'evm_add_handoverImageUrls' });
 }
 //  Add EVM Event
 function SaveEVM() {
@@ -328,6 +486,7 @@ function SaveEVM() {
             }
         }
         data.Detail += '}';
+        data.Detail = MergeEvmDetailWithImages(data.Detail, JSON.parse($('#evm_add_handoverImageUrls').val() || '[]'));
     }
     else {
         toastr["warning"]('Please click (+) button after enter work!', 'Data Null');
@@ -349,8 +508,8 @@ function SaveEVM() {
                     $('#AddEvm').modal('hide');
                     dataTable.rows().add(DrawRow(dataRes));
 
-                    DrawModelList(res.model, 'evm_model_datalist');
-                    DrawModelTableHead(res.model, 'ModelSelected');
+                    DrawModelList(respon.model, 'evm_model_datalist');
+                    DrawModelTableHead(respon.model, 'ModelSelected');
 
                     return;
                 }
@@ -425,7 +584,11 @@ $(document).on("click", "[data-e_edit]", function (e) {
                     { // Dynamic Input
                         let containers = document.getElementById('EditContainer');
                         containers.innerHTML = '';
-                        const arrEVM = JSON.parse(work.Detail)
+                        const parsedDetail = ParseEvmDetail(work.Detail);
+                        const arrEVM = parsedDetail.items;
+                        $("#evm_edit_handoverImage").val("");
+                        $("#evm_edit_handoverImageUrls").val(JSON.stringify(parsedDetail.imageUrls || []));
+                        RenderEvmImageList("#evm_edit_handoverImagePreview", parsedDetail.imageUrls || [], { canRemove: true, dataKey: 'evm_edit_handoverImageUrls' });
                         let max = 0;
                         $.each(arrEVM, function (key, value) {
                             max = key;
@@ -499,6 +662,7 @@ function SaveEVM_Edit() {
             }
         }
         data.Detail += '}';
+        data.Detail = MergeEvmDetailWithImages(data.Detail, JSON.parse($('#evm_edit_handoverImageUrls').val() || '[]'));
     }
     else {
         toastr["warning"]('Please click (+) button after enter work!', 'Data Null');
@@ -526,8 +690,8 @@ function SaveEVM_Edit() {
                     toastr["success"]('Update work success', dataRes.ID + ' | ' + GetDateString(dataRes.Date).replace('T', ' '));
                     dataTable.rows().updateRow(index, DrawRow(dataRes));
 
-                    DrawModelList(res.model, 'evm_model_datalist');
-                    DrawModelTableHead(res.model, 'ModelSelected');
+                    DrawModelList(respon.model, 'evm_model_datalist');
+                    DrawModelTableHead(respon.model, 'ModelSelected');
 
                     return;
                 }
@@ -639,7 +803,20 @@ $(document).on("click", "[data-e_detail]", function (e) {
                     //Card Description
                     let descc = document.getElementById('cardItems');
                     if (evm.Detail != null) {
-                        const item = JSON.parse(evm.Detail);
+                        const parsedDetail = ParseEvmDetail(evm.Detail);
+                        const item = parsedDetail.items;
+                        if (parsedDetail.imageUrls && parsedDetail.imageUrls.length > 0) {
+                            let imageHtml = '<div class="d-flex flex-wrap gap-2 mb-2">';
+                            $.each(parsedDetail.imageUrls, function (index, url) {
+                                imageHtml += `<img src="${url}" style="width:72px;height:72px;object-fit:cover;cursor:pointer;border-radius:4px;" onclick="SetEvmMainImage(${index})">`;
+                            });
+                            imageHtml += '</div>';
+                            imageHtml += `<div><img id="evmMainImage" src="${parsedDetail.imageUrls[0]}" style="max-width:100%;max-height:360px;cursor:pointer;border-radius:6px;" onclick="window.open(this.src,'_blank')"></div>`;
+                            $('#evmImageDetail').data('images', parsedDetail.imageUrls);
+                            $('#evmImageDetail').html(imageHtml);
+                        } else {
+                            $("#evmImageDetail").html('<span class="text-muted">Không có hình ảnh giao ca</span>');
+                        }
                         let html = '';
                         html += '<div class="row" style="border-bottom: 1px solid #d5d5d5">';
                         html += '<div class="col-3"><h5><b>SN</b></h5></div>';
@@ -723,6 +900,12 @@ $(document).on("click", "[data-e_detail]", function (e) {
         }
     });
 });
+function SetEvmMainImage(index) {
+    const images = $("#evmImageDetail").data("images") || [];
+    if (!images[index]) return;
+    $("#evmMainImage").attr("src", images[index]);
+}
+
 //  Show Detele Modal
 $(document).on("click", "[data-e_delete]", function (e) {
     e.preventDefault();

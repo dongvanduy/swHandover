@@ -335,6 +335,14 @@
                             <label for="inputName5" class="form-label">Result</label>
                             <textarea class="form-control" id="add_result"></textarea>
                         </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Hình ảnh giao ca</label>
+                            <input type="file" class="form-control" id="add_handoverImage" accept="image/*" multiple>
+                            <input type="hidden" id="add_handoverImageUrls">
+                            <div id="add_handoverImagePreview" class="mt-2 d-none">
+                                <div class="small text-muted">Ảnh đã upload sẽ hiển thị bên dưới (click để xem lớn)</div>
+                            </div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer justify-content-center">
@@ -488,6 +496,14 @@
                         <div class="col-md-12">
                             <label for="inputName5" class="form-label">Result</label>
                             <textarea class="form-control" id="Edit2_Result"></textarea>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Hình ảnh giao ca</label>
+                            <input type="file" class="form-control" id="Edit2_handoverImage" accept="image/*" multiple>
+                            <input type="hidden" id="Edit2_handoverImageUrls">
+                            <div id="Edit2_handoverImagePreview" class="mt-2 d-none">
+                                <div class="small text-muted">Ảnh đã upload sẽ hiển thị bên dưới (click để xem lớn)</div>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -659,6 +675,18 @@
                                     </h2>
                                     <div id="flush-collapseTwo" class="accordion-collapse collapse" aria-labelledby="flush-headingTwo" data-bs-parent="#accordionFlushExample">
                                         <div class="accordion-body" id="details_result" style="white-space:pre-line">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="flush-headingImage">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapseImage" aria-expanded="false" aria-controls="flush-collapseImage">
+                                            Hình ảnh giao ca
+                                        </button>
+                                    </h2>
+                                    <div id="flush-collapseImage" class="accordion-collapse collapse" aria-labelledby="flush-headingImage" data-bs-parent="#accordionFlushExample">
+                                        <div class="accordion-body" id="details_image">
                                         </div>
                                     </div>
                                 </div>
