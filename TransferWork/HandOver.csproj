@@ -286,6 +286,7 @@
     <Folder Include="Areas\Handover\Data\" />
     <Folder Include="Areas\Manager\Data\" />
     <Folder Include="Models\" />
+    <Folder Include="MyAssets\image\handover_upload\" />
   </ItemGroup>
   <ItemGroup>
     <EntityDeploy Include="DataModel.edmx">
