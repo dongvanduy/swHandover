@@ -37,7 +37,7 @@ namespace HandOver.Areas.Handover.Controllers
                 ListWorks = db.Works.OrderBy(s => s.ID).Where(w => w.Flow == "PE-RE" || w.Flow == "RE-PE").ToList();
                 ListUsers = db.Users.ToList();
 
-                var infoUser = ListUsers.Where(u => u.CardID != MySession.USER_SESSION)
+                var infoUser = ListUsers.Where(u => u.CardID != MySession.CurrentUserId)
                                         .Select(u => new { Department = u.Department, CardID = u.CardID, VnName = u.VnName, EnName = u.EnName, CnName = u.CnName });
                 for (int i = 0; i < ListWorks.Count; i++)
                 {
@@ -663,7 +663,7 @@ namespace HandOver.Areas.Handover.Controllers
 //                ListWorks = db.Works.OrderBy(s => s.ID).Where(w => w.Flow == "PE" + "-" + "RE" || w.Flow == "RE" + "-" + "PE").ToList();
 //                ListUsers = db.Users.Distinct().ToList();
 
-//                var infoUser = ListUsers.Where(u => u.CardID != MySession.USER_SESSION)
+//                var infoUser = ListUsers.Where(u => u.CardID != MySession.CurrentUserId)
 //                                        .Select(u => new { Department = u.Department, CardID = u.CardID, VnName = u.VnName, EnName = u.EnName, CnName = u.CnName });
 //                for (int i = 0; i < ListWorks.Count; i++)
 //                {
@@ -671,7 +671,7 @@ namespace HandOver.Areas.Handover.Controllers
 //                    {
 //                        if (MySession.USER_ACTIVE != 1)
 //                        {
-//                            if (ListWorks[i].OwnerRequest != MySession.USER_SESSION && ListWorks[i].OwnerReceive != MySession.USER_SESSION)
+//                            if (ListWorks[i].OwnerRequest != MySession.CurrentUserId && ListWorks[i].OwnerReceive != MySession.CurrentUserId)
 //                            {
 //                                ListWorks[i].HistoryLog = "{}";
 //                            }
@@ -757,13 +757,13 @@ namespace HandOver.Areas.Handover.Controllers
 //                {
 //                    if (MySession.USER_ACTIVE != 1)
 //                    {
-//                        if (record.OwnerRequest != MySession.USER_SESSION && record.OwnerReceive != MySession.USER_SESSION)
+//                        if (record.OwnerRequest != MySession.CurrentUserId && record.OwnerReceive != MySession.CurrentUserId)
 //                        {
 //                            return Json(new { status = "not access" });
 //                        }
 //                    }
 //                }
-//                if (MySession.USER_SESSION == record.OwnerRequest || MySession.USER_SESSION == record.OwnerReceive)
+//                if (MySession.CurrentUserId == record.OwnerRequest || MySession.CurrentUserId == record.OwnerReceive)
 //                {
 //                    try
 //                    {
@@ -804,7 +804,7 @@ namespace HandOver.Areas.Handover.Controllers
 //                {
 //                    if (MySession.USER_ACTIVE != 1)
 //                    {
-//                        if (record.OwnerRequest != MySession.USER_SESSION && record.OwnerReceive != MySession.USER_SESSION)
+//                        if (record.OwnerRequest != MySession.CurrentUserId && record.OwnerReceive != MySession.CurrentUserId)
 //                        {
 //                            return Json(new { status = "not access" });
 //                        }

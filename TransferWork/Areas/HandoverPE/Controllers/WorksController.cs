@@ -38,7 +38,7 @@ namespace HandOver.Areas.HandoverPE.Controllers
                 ListWorks = db.Works.OrderBy(s => s.ID).Where(w => w.Flow == DEPARTMENT + "-" + DEPARTMENT).ToList(); // first init list
                 ListUsers = db.Users.ToList();
 
-                var infoUser = ListUsers.Where(u => u.CardID != MySession.USER_SESSION && u.Department == DEPARTMENT) // get list user for show data table
+                var infoUser = ListUsers.Where(u => u.CardID != MySession.CurrentUserId && u.Department == DEPARTMENT) // get list user for show data table
                     .Select(u => new { Department = u.Department, CardID = u.CardID, VnName = u.VnName, EnName = u.EnName, CnName = u.CnName });
 
                 for (int i = 0; i < ListWorks.Count; i++) // handle list data
