@@ -2,6 +2,73 @@
 /*         SETUP, SHOW ... MODAL             */
 /*********************************************/
 
+const HANDOVER_IMAGE_KEY = "[HANDOVER_IMAGE]";
+
+function ParseDetailAndImage(detail) {
+    const raw = detail || '';
+    const markerIndex = raw.indexOf(HANDOVER_IMAGE_KEY);
+    if (markerIndex === -1) {
+        return { detailText: raw, imageUrl: '' };
+    }
+
+    const detailText = raw.substring(0, markerIndex).trimEnd();
+    const imageUrl = raw.substring(markerIndex + HANDOVER_IMAGE_KEY.length).trim();
+    return { detailText: detailText, imageUrl: imageUrl };
+}
+
+function BuildDetailWithImage(detailText, imageUrl) {
+    const text = (detailText || '').trim();
+    const url = (imageUrl || '').trim();
+    if (!url) {
+        return text;
+    }
+    if (!text) {
+        return HANDOVER_IMAGE_KEY + url;
+    }
+    return text + "\n" + HANDOVER_IMAGE_KEY + url;
+}
+
+function ToggleImagePreview(linkSelector, previewSelector, imageUrl) {
+    if (imageUrl) {
+        $(linkSelector).attr('href', imageUrl).text('Mở ảnh đã upload');
+        $(previewSelector).removeClass('d-none');
+    } else {
+        $(linkSelector).attr('href', '#').text('Chưa có ảnh');
+        $(previewSelector).addClass('d-none');
+    }
+}
+
+function UploadHandoverImage(fileInputSelector, hiddenUrlSelector, linkSelector, previewSelector) {
+    const input = $(fileInputSelector)[0];
+    if (!input || !input.files || input.files.length === 0) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', input.files[0]);
+
+    $.ajax({
+        url: '/HandoverRE/Works/UploadHandoverImage',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function (res) {
+            if (res.success) {
+                $(hiddenUrlSelector).val(res.fileUrl);
+                ToggleImagePreview(linkSelector, previewSelector, res.fileUrl);
+                toastr["success"]('Upload ảnh thành công');
+            }
+            else {
+                toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
+            }
+        },
+        error: function () {
+            toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
+        }
+    });
+}
+
 //create data to table
 $(function () {
     $.ajax({
@@ -42,6 +109,15 @@ $(function () {
         }
     });
 });
+
+$(document).on('change', '#add_handoverImage', function () {
+    UploadHandoverImage('#add_handoverImage', '#add_handoverImageUrl', '#add_handoverImageLink', '#add_handoverImagePreview');
+});
+
+$(document).on('change', '#Edit2_handoverImage', function () {
+    UploadHandoverImage('#Edit2_handoverImage', '#Edit2_handoverImageUrl', '#Edit2_handoverImageLink', '#Edit2_handoverImagePreview');
+});
+
 // Event
 {
     //  Show Add modal
@@ -59,6 +135,9 @@ $(function () {
 
         $('#add_work').val('');
         $('#add_result').val('');
+        $('#add_handoverImage').val('');
+        $('#add_handoverImageUrl').val('');
+        ToggleImagePreview('#add_handoverImageLink', '#add_handoverImagePreview', '');
 
         $('#add_modal').modal('show');
     }
@@ -77,7 +156,7 @@ $(function () {
             Status: $('#add_status').val(),
 
             WorkDes: $('#add_work').val(),
-            Detail: $('#add_result').val()
+            Detail: BuildDetailWithImage($('#add_result').val(), $('#add_handoverImageUrl').val())
         };
         if (!CheckData(data)) return;
         //Send to server
@@ -162,7 +241,11 @@ $(function () {
                         $("#Edit2_Type").val(data.Type);
                         $("#Edit2_Status").val(data.Status);
                         $("#Edit2_Work").val(data.WorkDes);
-                        $("#Edit2_Result").val(data.Detail);
+                        const detailData = ParseDetailAndImage(data.Detail);
+                        $("#Edit2_Result").val(detailData.detailText);
+                        $('#Edit2_handoverImage').val('');
+                        $('#Edit2_handoverImageUrl').val(detailData.imageUrl);
+                        ToggleImagePreview('#Edit2_handoverImageLink', '#Edit2_handoverImagePreview', detailData.imageUrl);
 
                         $('#Edit2Modal').modal('show');
                     }
@@ -188,7 +271,9 @@ $(function () {
 
                         $('#Edit_Status').val(work.Status);
                         $('#Edit_Type').val(work.Type);
-                        $('#Edit_Detail').val(work.Detail);
+                        const detailData = ParseDetailAndImage(work.Detail);
+                        $('#Edit_Detail').val(detailData.detailText);
+                        $('#Edit_Detail').data('image-url', detailData.imageUrl || '');
 
                         { // Dynamic Input
                             let cardElm = document.getElementById('cardEdit');
@@ -227,7 +312,7 @@ $(function () {
                     toastr["error"](res.error, 'SERVER ALRET');
                 }
             },
-            error: function () {
+            error: function (err) {
                 toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
             }
         });
@@ -253,7 +338,7 @@ $(function () {
                 Status: $('#Edit2_Status').val(),
 
                 WorkDes: $('#Edit2_Work').val(),
-                Detail: $('#Edit2_Result').val()
+                Detail: BuildDetailWithImage($('#Edit2_Result').val(), $('#Edit2_handoverImageUrl').val())
             }
 
         }
@@ -265,7 +350,7 @@ $(function () {
                 OwnerRequest: $('#Edit_UserReq').val(),
                 OwnerReceive: $('#Edit_UserRec').val(),
                 Status: $('#Edit_Status').val(),
-                Detail: $('#Edit_Detail').val()
+                Detail: BuildDetailWithImage($('#Edit_Detail').val(), $('#Edit_Detail').data('image-url') || '')
             }
             const workInput = [...document.querySelectorAll(`[data-InputEdit]`),];
             const arrLength = workInput.length;
@@ -494,12 +579,12 @@ $(function () {
                     });
 
                     // Card Time
-                    const p_time = `<label class="fw-bold text-success">${GetDateString(work.DateStart, 'DateTime')} </label> 
+                    const p_time = `<label class="fw-bold text-success">${GetDateString(work.DateStart, 'DateTime')} </label>
                                               <label> - </label>
                                             <label class="fw-bold text-danger"> ${GetDateString(work.DueDate, 'DateTime')}</label>`;
                     $('#details_date').html(p_time);
 
-                    //Card Work     
+                    //Card Work
                     let workHtmlText = '';
                     try {
                         $.each(JSON.parse(work.WorkDes), function (key, value) {
@@ -511,15 +596,22 @@ $(function () {
                     }
                     $('#details_work').html(workHtmlText);
 
-                    //Card Work     
-                    $('#details_result').html(work.Detail);
+                    //Card Result and Image
+                    const detailsData = ParseDetailAndImage(work.Detail);
+                    $('#details_result').html(detailsData.detailText);
+                    if (detailsData.imageUrl) {
+                        $('#details_image').html(`<a href="${detailsData.imageUrl}" target="_blank" rel="noopener">Mở hình ảnh giao ca</a>`);
+                    }
+                    else {
+                        $('#details_image').html('<span class="text-muted">Không có hình ảnh giao ca</span>');
+                    }
 
                     //Card History
                     let HistoryElm = document.getElementById('details_history');
 
                     HistoryElm.innerHTML = '';
-                    /* Check Permission*/
                     let showHistory = true;
+                    /* Check Permission*/
                     if (role == 3) {
                         if (work.OwnerRequest != getCookie("UserCookies", "CardID")) {
                             $.each(work.OwnerReceive.split(','), function (k, v) {

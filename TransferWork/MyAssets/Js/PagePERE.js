@@ -273,6 +273,7 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                         $('#Edit_Type').val(work.Type);
                         const detailData = ParseDetailAndImage(work.Detail);
                         $('#Edit_Detail').val(detailData.detailText);
+                        $('#Edit_Detail').data('image-url', detailData.imageUrl || '');
 
                         { // Dynamic Input
                             let cardElm = document.getElementById('cardEdit');
@@ -349,7 +350,7 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                 OwnerRequest: $('#Edit_UserReq').val(),
                 OwnerReceive: $('#Edit_UserRec').val(),
                 Status: $('#Edit_Status').val(),
-                Detail: BuildDetailWithImage($('#Edit_Detail').val(), '')
+                Detail: BuildDetailWithImage($('#Edit_Detail').val(), $('#Edit_Detail').data('image-url') || '')
             }
             const workInput = [...document.querySelectorAll(`[data-InputEdit]`),];
             const arrLength = workInput.length;
@@ -423,7 +424,7 @@ $(document).on('change', '#Edit2_handoverImage', function () {
             success: function (res) {
                 if (res.success) {
                     const work = res.data;
-                    
+
                     /* Check Permission*/
                     if (role == 3) {
                         const cookiesUser = getCookie("UserCookies", "CardID");
@@ -578,12 +579,12 @@ $(document).on('change', '#Edit2_handoverImage', function () {
                     });
 
                     // Card Time
-                    const p_time = `<label class="fw-bold text-success">${GetDateString(work.DateStart, 'DateTime')} </label> 
+                    const p_time = `<label class="fw-bold text-success">${GetDateString(work.DateStart, 'DateTime')} </label>
                                               <label> - </label>
                                             <label class="fw-bold text-danger"> ${GetDateString(work.DueDate, 'DateTime')}</label>`;
                     $('#details_date').html(p_time);
 
-                    //Card Work     
+                    //Card Work
                     let workHtmlText = '';
                     try {
                         $.each(JSON.parse(work.WorkDes), function (key, value) {

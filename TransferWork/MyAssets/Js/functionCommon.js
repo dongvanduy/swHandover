@@ -490,8 +490,11 @@ function resetModal(idModal) {
 // DrawModelList
 function DrawModelList(models, id_list) {
     let dataList = document.getElementById(id_list);
+    if (!dataList) return;
 
     dataList.innerHTML = '';
+    if (!Array.isArray(models)) return;
+
     for (let i = 0; i < models.length; i++) {
         let opt = document.createElement('option');
         opt.value = models[i].Model_;
@@ -528,6 +531,8 @@ function DrawModelTableHead(models, id_head) {
     $(`#${id_head}`).html('');
 
     $(`#${id_head}`).append($('<option>', {text: 'Model'}));
+
+    if (!Array.isArray(models)) return;
 
     $.each(models, function (k, v) {
         $(`#${id_head}`).append($('<option>', {

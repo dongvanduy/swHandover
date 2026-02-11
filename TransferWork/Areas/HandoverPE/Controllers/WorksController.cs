@@ -179,6 +179,51 @@ namespace HandOver.Areas.HandoverPE.Controllers
 
             return Json(new { success = "success", data = record, userReq = userReq, userRec = userRec }, JsonRequestBehavior.AllowGet);
         }    
+
+
+        [HttpPost]
+        public JsonResult UploadHandoverImage()
+        {
+            try
+            {
+                var file = Request.Files["file"];
+                if (file == null || file.ContentLength == 0)
+                {
+                    return Json(new { success = false, error = "Không tìm thấy file upload." });
+                }
+
+                var validExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+                string extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(extension) || !validExtensions.Contains(extension))
+                {
+                    return Json(new { success = false, error = "Chỉ hỗ trợ file ảnh: jpg, jpeg, png, gif, bmp, webp." });
+                }
+
+                const int maxFileSize = 5 * 1024 * 1024;
+                if (file.ContentLength > maxFileSize)
+                {
+                    return Json(new { success = false, error = "Kích thước file vượt quá 5MB." });
+                }
+
+                string uploadFolder = Server.MapPath("~/MyAssets/image/handover_upload");
+                if (!Directory.Exists(uploadFolder))
+                {
+                    Directory.CreateDirectory(uploadFolder);
+                }
+
+                string fileName = $"handover_{DateTime.Now:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}{extension}";
+                string savePath = Path.Combine(uploadFolder, fileName);
+                file.SaveAs(savePath);
+
+                string fileUrl = Url.Content($"~/MyAssets/image/handover_upload/{fileName}");
+                return Json(new { success = true, fileUrl = fileUrl, fileName = fileName });
+            }
+            catch
+            {
+                return Json(new { success = false, error = "Upload ảnh thất bại. Vui lòng thử lại." });
+            }
+        }
+
         // function 
         private string ValidationWork(Work work)
         {

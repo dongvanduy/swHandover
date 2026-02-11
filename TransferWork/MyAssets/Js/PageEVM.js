@@ -2,9 +2,90 @@
     CreateTable();
 });
 
+const EVM_IMAGE_META_KEY = "__HandoverImage__";
+
+function ParseEvmDetail(detailRaw) {
+    if (!detailRaw) return { items: {}, imageUrl: '' };
+
+    let data = {};
+    try {
+        data = JSON.parse(detailRaw);
+    } catch {
+        return { items: {}, imageUrl: '' };
+    }
+
+    const imageMeta = data[EVM_IMAGE_META_KEY];
+    const imageUrl = imageMeta && imageMeta.ImageUrl ? imageMeta.ImageUrl : '';
+    delete data[EVM_IMAGE_META_KEY];
+
+    return { items: data, imageUrl: imageUrl };
+}
+
+function MergeEvmDetailWithImage(detailRaw, imageUrl) {
+    let data = {};
+    try {
+        data = JSON.parse(detailRaw || '{}');
+    } catch {
+        data = {};
+    }
+
+    delete data[EVM_IMAGE_META_KEY];
+    if (imageUrl) {
+        data[EVM_IMAGE_META_KEY] = { ImageUrl: imageUrl };
+    }
+
+    return JSON.stringify(data);
+}
+
+function ToggleEvmImagePreview(linkSelector, previewSelector, imageUrl) {
+    if (imageUrl) {
+        $(linkSelector).attr('href', imageUrl).text('Mở ảnh đã upload');
+        $(previewSelector).removeClass('d-none');
+    } else {
+        $(linkSelector).attr('href', '#').text('Chưa có ảnh');
+        $(previewSelector).addClass('d-none');
+    }
+}
+
+function UploadEvmHandoverImage(fileInputSelector, hiddenUrlSelector, linkSelector, previewSelector) {
+    const input = $(fileInputSelector)[0];
+    if (!input || !input.files || input.files.length === 0) return;
+
+    const formData = new FormData();
+    formData.append('file', input.files[0]);
+
+    $.ajax({
+        url: '/HandoverEVM/Works/UploadHandoverImage',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function (res) {
+            if (res.success) {
+                $(hiddenUrlSelector).val(res.fileUrl);
+                ToggleEvmImagePreview(linkSelector, previewSelector, res.fileUrl);
+                toastr["success"]('Upload ảnh thành công');
+            } else {
+                toastr["error"](res.error || 'Upload ảnh thất bại', 'SERVER ALERT');
+            }
+        },
+        error: function () {
+            toastr["error"]('Connect to server error! Please double check or contact', 'CONNECT ERROR');
+        }
+    });
+}
+
+$(document).on('change', '#evm_add_handoverImage', function () {
+    UploadEvmHandoverImage('#evm_add_handoverImage', '#evm_add_handoverImageUrl', '#evm_add_handoverImageLink', '#evm_add_handoverImagePreview');
+});
+
+$(document).on('change', '#evm_edit_handoverImage', function () {
+    UploadEvmHandoverImage('#evm_edit_handoverImage', '#evm_edit_handoverImageUrl', '#evm_edit_handoverImageLink', '#evm_edit_handoverImagePreview');
+});
+
 // Add row input dynamic
-function AddItemDnm() {  
-    // query all input and get max int, get card and button   
+function AddItemDnm() {
+    // query all input and get max int, get card and button
     let container = document.getElementById('DnmContainer');
     let itemArr = [...container.querySelectorAll(`[data-RowIndex]`),];
 
@@ -61,7 +142,7 @@ function Refesh(index) {
     };
 }
 // Reset modal
-function refreshModal() {   
+function refreshModal() {
     let addModal = document.getElementById('DnmContainer');
     let rowArr = addModal.querySelectorAll('[data-RowIndex]');
     if (rowArr.length > 2) {
@@ -74,7 +155,7 @@ function refreshModal() {
         if (inputArr[i].getAttribute('disabled') == null) {
             inputArr[i].value = '';
         }
-    }   
+    }
 }
 // Render data to row
 function DrawRow(data) {
@@ -95,10 +176,13 @@ function DrawRow(data) {
     let col2 = '<td class="e_col_3">' + data.Model + '</td>';
     rowTemp.push(col2);
 
-    let detail = JSON.parse(data.Detail);
+    let detail = ParseEvmDetail(data.Detail).items;
     // Col 4
     let col3 = '<td class="e_col_4">';
     $.each(detail, function (k, v) {
+        if (k.toString().startsWith("__")) {
+            return;
+        }
         if (k > 3) {
             return;
         }
@@ -107,12 +191,15 @@ function DrawRow(data) {
         }
         if (k == 3) {
             col3 += '<p class="text-over" style="border: 0">...</p>';
-        }        
-    });    
-    rowTemp.push(col3);   
+        }
+    });
+    rowTemp.push(col3);
     //col 5
     let col4 = '<td class="e_col_5">';
     $.each(detail, function (k, v) {
+        if (k.toString().startsWith("__")) {
+            return;
+        }
         if (k > 3) {
             return;
         }
@@ -122,11 +209,14 @@ function DrawRow(data) {
         if (k == 3) {
             col4 += '<p class="text-over" style="border: 0">...</p>';
         }
-    });    
-    rowTemp.push(col4);   
+    });
+    rowTemp.push(col4);
     //col 6
     let col5 = '<td class="e_col_6">';
     $.each(detail, function (k, v) {
+        if (k.toString().startsWith("__")) {
+            return;
+        }
         if (k > 3) {
             return;
         }
@@ -136,8 +226,8 @@ function DrawRow(data) {
         if (k == 3) {
             col5 += '<p class="text-over" style="border: 0">...</p>';
         }
-    });    
-    rowTemp.push(col5);   
+    });
+    rowTemp.push(col5);
     // Col 7
     let owner = data.Owner.split(',');
     let col6 = '<td class="col_4">';
@@ -197,7 +287,7 @@ function CreateTable () {
         contentType: "application/json;charset=utf-8",
         dataType: "json",
         success: function (res) {
-            dataTable.rows().remove('all'); 
+            dataTable.rows().remove('all');
             DrawUserList(res.infoUser, 'add_listOwnerEvm');
             DrawUserList(res.infoUser, 'edit_listOwnerEvm');
 
@@ -205,7 +295,7 @@ function CreateTable () {
             DrawModelTableHead(res.model, 'ModelSelected');
 
             switch (res.status) {
-                case 'success': {                    
+                case 'success': {
                     toastr["success"]('Get datatable success!', 'DONE');
                     $.each(res.data, function (key, value) {
                         dataTable.rows().add(DrawRow(value));
@@ -240,7 +330,7 @@ function DrawUserList(infoUser, idList) {
 }
 // Add row input dynamic
 function EditItemDnm() {
-    // query all input and get max int, get card and button   
+    // query all input and get max int, get card and button
     let container = document.getElementById('EditContainer');
     let itemArr = [...container.querySelectorAll(`[data-RowIndex]`),];
 
@@ -298,6 +388,9 @@ function AddEVM_Open() {
     $('#AddEvm').modal('show');
     refreshModal();
     document.getElementById("evm_date").value = GetDateToday();
+    $("#evm_add_handoverImage").val("");
+    $("#evm_add_handoverImageUrl").val("");
+    ToggleEvmImagePreview("#evm_add_handoverImageLink", "#evm_add_handoverImagePreview", "");
 }
 //  Add EVM Event
 function SaveEVM() {
@@ -328,6 +421,7 @@ function SaveEVM() {
             }
         }
         data.Detail += '}';
+        data.Detail = MergeEvmDetailWithImage(data.Detail, $('#evm_add_handoverImageUrl').val());
     }
     else {
         toastr["warning"]('Please click (+) button after enter work!', 'Data Null');
@@ -349,8 +443,8 @@ function SaveEVM() {
                     $('#AddEvm').modal('hide');
                     dataTable.rows().add(DrawRow(dataRes));
 
-                    DrawModelList(res.model, 'evm_model_datalist');
-                    DrawModelTableHead(res.model, 'ModelSelected');
+                    DrawModelList(respon.model, 'evm_model_datalist');
+                    DrawModelTableHead(respon.model, 'ModelSelected');
 
                     return;
                 }
@@ -425,7 +519,11 @@ $(document).on("click", "[data-e_edit]", function (e) {
                     { // Dynamic Input
                         let containers = document.getElementById('EditContainer');
                         containers.innerHTML = '';
-                        const arrEVM = JSON.parse(work.Detail)
+                        const parsedDetail = ParseEvmDetail(work.Detail);
+                        const arrEVM = parsedDetail.items;
+                        $("#evm_edit_handoverImage").val("");
+                        $("#evm_edit_handoverImageUrl").val(parsedDetail.imageUrl);
+                        ToggleEvmImagePreview("#evm_edit_handoverImageLink", "#evm_edit_handoverImagePreview", parsedDetail.imageUrl);
                         let max = 0;
                         $.each(arrEVM, function (key, value) {
                             max = key;
@@ -499,6 +597,7 @@ function SaveEVM_Edit() {
             }
         }
         data.Detail += '}';
+        data.Detail = MergeEvmDetailWithImage(data.Detail, $('#evm_edit_handoverImageUrl').val());
     }
     else {
         toastr["warning"]('Please click (+) button after enter work!', 'Data Null');
@@ -526,8 +625,8 @@ function SaveEVM_Edit() {
                     toastr["success"]('Update work success', dataRes.ID + ' | ' + GetDateString(dataRes.Date).replace('T', ' '));
                     dataTable.rows().updateRow(index, DrawRow(dataRes));
 
-                    DrawModelList(res.model, 'evm_model_datalist');
-                    DrawModelTableHead(res.model, 'ModelSelected');
+                    DrawModelList(respon.model, 'evm_model_datalist');
+                    DrawModelTableHead(respon.model, 'ModelSelected');
 
                     return;
                 }
@@ -639,7 +738,13 @@ $(document).on("click", "[data-e_detail]", function (e) {
                     //Card Description
                     let descc = document.getElementById('cardItems');
                     if (evm.Detail != null) {
-                        const item = JSON.parse(evm.Detail);
+                        const parsedDetail = ParseEvmDetail(evm.Detail);
+                        const item = parsedDetail.items;
+                        if (parsedDetail.imageUrl) {
+                            $("#evmImageDetail").html(`<a href="${parsedDetail.imageUrl}" target="_blank" rel="noopener">Mở hình ảnh giao ca</a>`);
+                        } else {
+                            $("#evmImageDetail").html('<span class="text-muted">Không có hình ảnh giao ca</span>');
+                        }
                         let html = '';
                         html += '<div class="row" style="border-bottom: 1px solid #d5d5d5">';
                         html += '<div class="col-3"><h5><b>SN</b></h5></div>';
