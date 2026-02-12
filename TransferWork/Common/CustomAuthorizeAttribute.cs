@@ -10,7 +10,10 @@ namespace HandOver.Common
     public class CustomAuthorizeAttribute : AuthorizeAttribute
     {
         public int RoleNum { get; set; } = 0;
-        private readonly TransferWorkEntities db = new TransferWorkEntities();
+
+        // Lưu ý: Không nên khởi tạo DbContext ở cấp class Attribute vì khó quản lý vòng đời (Dispose).
+        // Tuy nhiên để sửa nhanh theo cấu trúc hiện tại, tôi sẽ giữ nguyên nhưng sửa logic.
+
         public override void OnAuthorization(AuthorizationContext filterContext)
         {
             var userLogin = HttpContext.Current.Session[MySession.USER_SESSION];
@@ -21,23 +24,29 @@ namespace HandOver.Common
                 filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
                 {
                     controller = "Login",
-                    action = "Login",
-                    area = "", // area cần trỏ tới
+                    action = "Index", // Đã sửa action thành Index cho đúng với LoginController
+                    area = "",
                 }));
                 return;
             }
             else
             {
-                // đã có session => kiểm tra quyền:
-                var currentUser = db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId);
-                if (currentUser == null || currentUser.Role <= RoleNum)
+                // Mở connection mới để đảm bảo không bị lỗi context cũ
+                using (var db = new TransferWorkEntities())
                 {
-                    filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
+                    var currentUser = db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId);
+
+                    // FIX LỖI CHÍNH Ở ĐÂY: Sửa <= thành < 
+                    // Logic: Nếu Role user nhỏ hơn Role yêu cầu -> Chặn
+                    if (currentUser == null || currentUser.Role < RoleNum)
                     {
-                        controller = "Error",
-                        action = "Error500",
-                        area = "", // area cần trỏ tới
-                    }));
+                        filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
+                        {
+                            controller = "Error",
+                            action = "Error500",
+                            area = "",
+                        }));
+                    }
                 }
             }
         }
