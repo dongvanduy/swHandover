@@ -106,7 +106,7 @@ namespace HandOver.Areas.HandoverEVM.Controllers
                     {
                         if (MySession.USER_ACTIVE != 1)
                         {
-                            if (ListWorks[i].Owner != MySession.USER_SESSION)
+                            if (ListWorks[i].Owner != MySession.CurrentUserId)
                             {
                                 ListWorks[i].History = "{}";
                             }
@@ -143,7 +143,7 @@ namespace HandOver.Areas.HandoverEVM.Controllers
                 {
                     if (MySession.USER_ACTIVE != 1)
                     {
-                        if (record.Owner != MySession.USER_SESSION)
+                        if (record.Owner != MySession.CurrentUserId)
                         {
                             return Json(new { status = "not access" });
                         }

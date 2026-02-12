@@ -160,9 +160,9 @@ namespace HandOver.Controllers
             Response.Cookies.Add(myCookie);
 
             Session.Clear();
-            MySession.USER_SESSION = "-1";
-            MySession.USER_ROLE = -1;
-            MySession.USER_ACTIVE = -1;
+            MySession.CurrentUserId = null;
+            MySession.USER_ROLE = 0;
+            MySession.USER_ACTIVE = 0;
 
             return RedirectToAction("Index", "Login");
         }
@@ -175,7 +175,7 @@ namespace HandOver.Controllers
             newPass = (newPass ?? "").Trim();
             confirm = (confirm ?? "").Trim();
 
-            if (id != MySession.USER_SESSION)
+            if (id != MySession.CurrentUserId)
             {
                 return Json(new { status = "fail" });
             }
@@ -204,11 +204,11 @@ namespace HandOver.Controllers
 
         public void CreateSession(User user)
         {
-            MySession.USER_SESSION = user.CardID;
+            MySession.CurrentUserId = user.CardID;
             MySession.USER_ACTIVE = (int)user.IsActive;
             MySession.USER_ROLE = user.Role;
 
-            Session[user.CardID] = user;
+            Session[MySession.USER_SESSION] = user;
 
             Response.Cookies["UserCookies"]["CardID"] = user.CardID;
             Response.Cookies["UserCookies"]["VnName"] = Server.UrlEncode(user.VnName);

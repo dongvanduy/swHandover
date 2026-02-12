@@ -24,7 +24,7 @@ namespace HandOver.Areas.Manager.Controllers
         {
             ListUsers = await Task.Run(() => db.Users.ToList());
             ListModel = await Task.Run(() => db.Models1.ToList());
-            ViewBag.ThisUser = await Task.Run(() => db.Users.SingleOrDefault(u => u.CardID == MySession.USER_SESSION));
+            ViewBag.ThisUser = await Task.Run(() => db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId));
             ViewBag.ThisUser.Password = "";
             ViewBag.Role = MySession.USER_ROLE;
             return View();

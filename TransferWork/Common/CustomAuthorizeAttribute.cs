@@ -29,7 +29,8 @@ namespace HandOver.Common
             else
             {
                 // đã có session => kiểm tra quyền:
-                if (db.Users.SingleOrDefault(u => u.CardID == MySession.USER_SESSION).Role <= RoleNum)
+                var currentUser = db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId);
+                if (currentUser == null || currentUser.Role <= RoleNum)
                 {
                     filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
                     {
