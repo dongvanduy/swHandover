@@ -13,6 +13,7 @@ using System.Web.Mvc;
 
 namespace HandOver.Areas.Manager.Controllers
 {
+    [CustomAuthorize(RoleNum = 0)]
     public class ManagerController : Controller
     {
         private readonly TransferWorkEntities db = new TransferWorkEntities();
@@ -24,8 +25,15 @@ namespace HandOver.Areas.Manager.Controllers
         {
             ListUsers = await Task.Run(() => db.Users.ToList());
             ListModel = await Task.Run(() => db.Models1.ToList());
-            ViewBag.ThisUser = await Task.Run(() => db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId));
-            ViewBag.ThisUser.Password = "";
+            var currentUser = await Task.Run(() => db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId));
+
+            if (currentUser == null)
+            {
+                return RedirectToAction("Index", "Login", new { area = "" });
+            }
+
+            currentUser.Password = "";
+            ViewBag.ThisUser = currentUser;
             ViewBag.Role = MySession.USER_ROLE;
             return View();
         }

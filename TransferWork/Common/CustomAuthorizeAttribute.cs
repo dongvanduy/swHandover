@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;
@@ -11,35 +10,74 @@ namespace HandOver.Common
     {
         public int RoleNum { get; set; } = 0;
         private readonly TransferWorkEntities db = new TransferWorkEntities();
+
         public override void OnAuthorization(AuthorizationContext filterContext)
         {
-            var userLogin = HttpContext.Current.Session[MySession.USER_SESSION];
+            var httpContext = filterContext.HttpContext;
+            var userLogin = httpContext?.Session?[MySession.USER_SESSION];
 
-            // Nếu chưa có session thì bắt đăng nhập:
-            if (userLogin == null)
+            // Nếu session bị mất, thử khôi phục từ cookie đăng nhập.
+            if (userLogin == null && !TryRestoreSessionFromCookie(httpContext))
             {
                 filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
                 {
                     controller = "Login",
-                    action = "Login",
-                    area = "", // area cần trỏ tới
+                    action = "Index",
+                    area = "",
                 }));
                 return;
             }
-            else
+
+            var currentUserId = MySession.CurrentUserId;
+            if (string.IsNullOrWhiteSpace(currentUserId))
             {
-                // đã có session => kiểm tra quyền:
-                var currentUser = db.Users.SingleOrDefault(u => u.CardID == MySession.CurrentUserId);
-                if (currentUser == null || currentUser.Role <= RoleNum)
+                filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
                 {
-                    filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
-                    {
-                        controller = "Error",
-                        action = "Error500",
-                        area = "", // area cần trỏ tới
-                    }));
-                }
+                    controller = "Login",
+                    action = "Index",
+                    area = "",
+                }));
+                return;
             }
+
+            var currentUser = db.Users.SingleOrDefault(u => u.CardID == currentUserId);
+            if (currentUser == null || currentUser.Role <= RoleNum)
+            {
+                filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
+                {
+                    controller = "Error",
+                    action = "Error500",
+                    area = "",
+                }));
+            }
+        }
+
+        private bool TryRestoreSessionFromCookie(HttpContextBase httpContext)
+        {
+            if (httpContext?.Request?.Cookies == null || httpContext.Session == null)
+            {
+                return false;
+            }
+
+            HttpCookie userCookie = httpContext.Request.Cookies["UserCookies"];
+            string cardId = (userCookie?["CardID"] ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(cardId))
+            {
+                return false;
+            }
+
+            var user = db.Users.SingleOrDefault(u => u.CardID == cardId);
+            if (user == null || user.IsActive != 1)
+            {
+                return false;
+            }
+
+            MySession.CurrentUserId = user.CardID;
+            MySession.USER_ACTIVE = (int)(user.IsActive ?? 0);
+            MySession.USER_ROLE = user.Role;
+            httpContext.Session[MySession.USER_SESSION] = user;
+
+            return true;
         }
     }
 }
