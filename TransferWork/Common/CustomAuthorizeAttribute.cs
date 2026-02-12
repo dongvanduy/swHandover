@@ -21,7 +21,7 @@ namespace HandOver.Common
                 filterContext.Result = new RedirectToRouteResult(new RouteValueDictionary(new
                 {
                     controller = "Login",
-                    action = "Login",
+                    action = "Index",
                     area = "", // area cần trỏ tới
                 }));
                 return;
